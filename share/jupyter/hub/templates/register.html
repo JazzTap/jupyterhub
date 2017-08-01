@@ -1,0 +1,90 @@
+{% extends "prompt.html" %}
+
+{% block login %}
+
+  {% if email_sent %}
+  <p class="email_sent">
+    {{email_sent}}
+  </p>
+  <a href="../login">Back to login</a>
+  {% else %}
+    <form action="/hub/register" method="post" role="form">
+    <div class="auth-form-header">
+      Register account
+    </div>
+    <div class='auth-form-body'>
+
+      <label for="username_input">E-mail:</label>
+      <input
+        id="username_input"
+        type="username"
+        autocapitalize="off"
+        autocorrect="off"
+        class="form-control"
+        name="username"
+        tabindex="1"
+        autofocus="autofocus"
+      />
+      <label for='password_input'>Password:</label>
+      <input
+        type="password"
+        class="form-control"
+        name="password"
+        id="password_input"
+        tabindex="2"
+      />
+      <label for='passwordmatch_input'>Confirm Password:</label>
+      <input
+        type="password"
+        class="form-control"
+        name="passwordmatch"
+        id="passwordmatch_input"
+        tabindex="3"
+      />
+
+      <label for="firstname_input">First Name:</label>
+      <input
+        id="firstname_input"
+        type="text"
+        autocorrect="off"
+        class="form-control"
+        name="firstname"
+        tabindex="4"
+      />
+      <label for="lastname_input">Last Name:</label>
+      <input
+        id="lastname_input"
+        type="text"
+        autocorrect="off"
+        class="form-control"
+        name="lastname"
+        tabindex="5"
+      />
+
+      <label for="organization_input">Organization:</label>
+      <input
+        id="organization_input"
+        type="text"
+        autocapitalize="off"
+        autocorrect="off"
+        class="form-control"
+        name="organization"
+        tabindex="6"
+      />
+
+      <input
+        type="submit"
+        id="register_submit"
+        class='btn btn-jupyter'
+        value='Sign Up'
+        tabindex="7"
+      />
+    </div>
+    </form>
+
+    <center>
+    <a href="../recover"
+       id="login-forgot-password">Forgot your password?</a>
+    </center>
+  {% endif %}
+{% endblock login %}

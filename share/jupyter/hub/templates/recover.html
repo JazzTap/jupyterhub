@@ -1,0 +1,64 @@
+{% extends "prompt.html" %}
+
+{% block login %}
+    
+  {% if email_sent %}
+  <p class="email_sent">
+    {{email_sent}}
+  </p>
+  <a href="../login">Back to login</a>
+  {% else %}
+    <form action="/hub/recover" method="post" role="form">
+    <div class="auth-form-header">
+      Recover password
+    </div>
+    <div class='auth-form-body'>
+
+      <label for="username_input">E-mail:</label>
+      <input
+        id="username_input"
+        type="username"
+        autocapitalize="off"
+        autocorrect="off"
+        class="form-control"
+        name="username"
+        val="{{username}}"
+        tabindex="1"
+        autofocus="autofocus"
+      />
+
+      <label for="firstname_input">First Name:</label>
+      <input
+        id="firstname_input"
+        type="text"
+        autocorrect="off"
+        class="form-control"
+        name="firstname"
+        tabindex="2"
+      />
+      <label for="lastname_input">Last Name:</label>
+      <input
+        id="lastname_input"
+        type="text"
+        autocorrect="off"
+        class="form-control"
+        name="lastname"
+        tabindex="3"
+      />
+
+      <input
+        type="submit"
+        id="recover_submit"
+        class='btn btn-jupyter'
+        value='Send Recovery Email'
+        tabindex="4"
+      />
+    </div>
+    </form>
+
+    <center>
+    <a href="../register"
+       id="login-create-an-account">Create an account</a>
+    </center>
+  {% endif %}
+{% endblock login %}

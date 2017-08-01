@@ -99,10 +99,55 @@ class LoginHandler(BaseHandler):
             self.finish(html)
 
 
+import pymysql, itsdangerous
+# FIXME: add dependencies to setuptools.
+
+class RegisterHandler(BaseHandler):
+    @gen.coroutine
+    def get(self):
+        self.finish(self.render_template('register.html'))
+
+    @gen.coroutine
+    def post(self):
+        data = {}
+        for arg in self.request.arguments:
+            data[arg] = self.get_argument(arg, strip=False)
+
+        # FIXME: generate registration ticket
+        print(data)
+
+        html = self.render_template('register.html',
+            email_sent='Please verify your address at '+data['username']+'.',
+        )
+        self.finish(html)
+
+class RecoverHandler(BaseHandler):
+    @gen.coroutine
+    def get(self):
+        self.finish(self.render_template('recover.html'))
+
+    @gen.coroutine
+    def post(self):
+        data = {}
+        for arg in self.request.arguments:
+            data[arg] = self.get_argument(arg, strip=False)
+
+        # FIXME: generate recovery ticket
+        print(data)
+
+        html = self.render_template('recover.html',
+            email_sent='Recovery e-mail sent to '+data['username']+'.',
+        )
+        self.finish(html)
+
 # /login renders the login page or the "Login with..." link,
 # so it should always be registered.
 # /logout clears cookies.
+# /register and /forgotpwd are specific to phcpy's SQL deployment.
 default_handlers = [
     (r"/login", LoginHandler),
     (r"/logout", LogoutHandler),
+
+    (r'/register', RegisterHandler),
+    (r'/recover', RecoverHandler),
 ]
