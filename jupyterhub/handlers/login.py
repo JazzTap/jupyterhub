@@ -10,6 +10,11 @@ from tornado import web
 
 from .base import BaseHandler
 
+# for phcpy db and its support tickets
+import sqlite3, smtplib
+import secrets # FIXME: 3.6+
+import hashlib, datetime # TODO: single use
+from email.mime.text import MIMEText
 
 class LogoutHandler(BaseHandler):
     """Log a user out by clearing their login cookie."""
@@ -99,55 +104,287 @@ class LoginHandler(BaseHandler):
             self.finish(html)
 
 
-import pymysql, itsdangerous
-# FIXME: add dependencies to setuptools.
+class PHCHandler(BaseHandler): # ValidatingHandler
+    """Base class for pages with forms that recycle input, esp. in a validation loop.
+       Subclasses may define post(self) in terms of render_ and valid_ methods."""
 
-class RegisterHandler(BaseHandler):
     @gen.coroutine
     def get(self):
-        self.finish(self.render_template('register.html'))
+        self.finish(self.render_init())
+
+    @property
+    def phc_db(self):
+        # print(self.config.keys()) # list of classnames used in config
+        # FIXME: ungraceful exception when database of appropriate form unavailable
+        return sqlite3.connect(self.config.PHCHandler.phc_db)
+
+    @property
+    def html(self):
+        raise NotImplementedError(
+                "PHCHandler subclass must specify a jinja template.")
+
+
+    def valid_user(self, login, fname, lname):
+        c = self.phc_db.cursor()
+        c.execute("SELECT Name_First='{}' AND Name_Last='{}' FROM users WHERE Email='{}';"
+                    .format(fname, lname, login))
+        ret = c.fetchall()
+        print('filter by name: ', ret, len(ret))
+        c.close()
+        return ret is not None
+
+    def valid_ticket(self, login, ticket):
+        c = self.phc_db.cursor()
+        c.execute("SELECT '{}'= Ticket FROM users WHERE Email='{}';".format(ticket, login))
+        ret = c.fetchall()
+        print('filter by ticket:', ret, len(ret))
+        c.close()
+        return ret is not None
+
+    def valid_pass(self, pwd, pwdmatch):
+        return pwd == pwdmatch and pwd is not ""
+
+    def has_folder(self, login):
+        c = self.phc_db.cursor()
+        c.execute("SELECT Folder FROM users WHERE Email='{}';"
+                    .format(ticket, login))
+        s = c.fetchone()
+        c.close()
+        return s is not None and s[0] is not None and s[0] is not ""
+
+
+    def render_init(self):
+        return self.render_template(self.html,
+            **{k: self.get_argument(k, strip=False) for k in self.request.arguments})
+
+    def render_oops(self, oops,
+                    blocked=['password', 'passwordmatch']):
+        return self.render_template(self.html,
+                warning = oops,
+                **{k: self.get_argument(k, strip=False) for k in self.request.arguments
+                                           if k not in blocked})
+
+    def render_ok(self, ok):
+        return self.render_template(self.html, success = ok)
+
+    # TODO: apply best practices
+    def phc_email(self, msg):
+        cfg = self.config.PHCHandler # dict(phcstmp='', phcmail='', phcmailps='')
+
+        if cfg.phcstmp == '':
+            # raise Exception("Mail server not configured.")
+            print(msg) # TEST configuration
+            return
+        
+        server = smtplib.SMTP(cfg.phcstmp)
+        server.starttls()  
+        server.login(cfg.phcmail, cfg.phcmailps)
+        try:
+            server.sendmail(cfg.phcmail, [msg['To'], cfg.phcmail], msg.as_string())
+        except smtplib.SMTPRecipientsRefused as e:
+            raise e
+        finally:
+            server.quit()
+
+
+class RegisterHandler(PHCHandler):
+    """Sends activation e-mails to new users."""
+    @property
+    def html(self): return 'register.html'
 
     @gen.coroutine
     def post(self):
-        data = {}
-        for arg in self.request.arguments:
-            data[arg] = self.get_argument(arg, strip=False)
+        data = {k: self.get_argument(k, strip=False) for k in self.request.arguments}
+        c = self.phc_db.cursor()
 
-        # FIXME: generate registration ticket
-        print(data)
+        c.execute("SELECT Uid FROM users WHERE Email='{}';".format(data['username']))
+        if len(c.fetchall()) == 0:
+            ticket = secrets.token_urlsafe(32) # NOTE: changed from sha(time)
+   
+            try:
+                self.send_email(data['username'], data['firstname'], ticket)
+            except Exception as e:
+                # smtplib.SMTPRecipientsRefused?
+                c.close()
+                self.finish(self.render_oops('Could not send activation email.'))
 
-        html = self.render_template('register.html',
-            email_sent='Please verify your address at '+data['username']+'.',
-        )
-        self.finish(html)
+            mungedPass = str(hashlib.sha1(data['password'].encode('utf-8')).hexdigest())
+                            # FIXME: salt me
+            timestamp = str(datetime.date.today())
 
-class RecoverHandler(BaseHandler):
-    @gen.coroutine
-    def get(self):
-        self.finish(self.render_template('recover.html'))
+            # sqlite> CREATE TABLE users(Uid, Name_First, Name_Last, Email, Organization, passwd, Created, Ticket, Folder, Tmp); 
+            # FIXME: rows aren't appearing in db. commit fails silently?
+
+            c.execute("INSERT INTO users VALUES (NULL,'%s','%s','%s','%s','%s','%s','%s','%s',NULL);" % (data['firstname'],data['lastname'],data['username'],data['organization'],mungedPass,timestamp,ticket,"")) # create folder on activation
+
+            try:
+                self.phc_db.commit()
+            except e:
+                print(e)
+            else:
+                print("commit ok")
+
+            c.close()
+            self.finish(self.render_ok('Please verify your address at '+
+                                    data['username']+'.'))
+        else:
+            c.close()
+            self.finish(self.render_oops('E-mail already registered.'))
+
+    def send_email(self, email, firstname, ticket):
+        msg_cont = """Hello %s,
+
+    Welcome to PHC Web Interface. Please click the following link to activate your account.
+
+
+    %s/hub/activate?login=%s&ticket=%s""" % (firstname,
+        self.config.PHCHandler.host_address, email, ticket)
+
+        msg = MIMEText(msg_cont)
+        msg['Subject'] = "Welcome %s to PHC Web Interface" % firstname
+        msg['To'] = email
+        self.phc_email(msg)
+
+
+class ForgotPassHandler(PHCHandler):
+    """Sends password recovery e-mails to existing users."""
+    @property
+    def html(self): return 'forgot_pass.html'
 
     @gen.coroutine
     def post(self):
-        data = {}
-        for arg in self.request.arguments:
-            data[arg] = self.get_argument(arg, strip=False)
+        data = {k: self.get_argument(k, strip=False) for k in self.request.arguments}
 
-        # FIXME: generate recovery ticket
+        if self.valid_user(data['username'], data['firstname'], data['lastname']):
+            # FIXME: check for Folder -> don't send resets to unverified emails (why?)
+            ticket = secrets.token_urlsafe(32)
+
+            try:
+                self.send_email(data['username'], data['firstname'], ticket)
+
+            except smtplib.SMTPRecipientsRefused as e:
+                self.finish(self.render_oops('Could not send recovery email.'))
+            except Exception as e:
+                self.finish(self.render_oops(e))
+
+            else:
+                c = self.phc_db.cursor()
+                c.execute("UPDATE users SET Ticket = '{}', passwd = NULL WHERE Email = '{}';"
+                          .format(ticket, data['username'])) # TODO: keep old password?
+                self.phc_db.commit()
+                c.close()
+
+                self.finish(self.render_ok('Reset done. Recovery e-mail sent to '
+                                            +data['username']+'.'))
+        else:
+            self.finish(self.render_oops('No user by that name and email found.'))
+
+    def send_email(self, email, firstname, ticket):
+        msg_cont = """Hello %s,
+
+    Welcome to PHC Web Interface. Please click the following link to reset your password.
+
+
+    %s/hub/recover?login=%s&ticket=%s""" % (firstname,
+        self.config.PHCHandler.host_address, email, ticket)
+
+        msg = MIMEText(msg_cont)
+        msg['Subject'] = "Your PHCWEB password has been reset."
+        msg['To'] = email
+        self.phc_email(msg)
+
+
+class ActivateHandler(PHCHandler):
+    """Declares user folder given a valid ticket."""
+
+    @gen.coroutine
+    def get(self):
+        data = {k: self.get_argument(k, strip=False) for k in self.request.arguments}
+
+        login_url = self.authenticator.login_url(self.hub.base_url)
+
+        if self.valid_ticket(data['login'], data['ticket']):
+            if not has_folder(data['login']):
+                # TODO: create unique UNIX user(name)s instead
+                folder = secrets.token_urlsafe(32)
+
+                c = self.phc_db.cursor() # TODO: reuse cursor
+                c.execute("UPDATE users SET Folder = '{}' WHERE Email = '{}'"
+                            .format(folder, data['login']))
+                self.phc_db.commit()
+                c.close()
+
+                # FIXME: pass login_error to login.html via LoginHandler
+                login_error = 'Your account has been activated.'
+            else:
+                login_error = 'Account already activated.'
+                
+        else:
+            login_error = 'Could not activate account with that ticket.'
+            
+        login_url = url_concat(login_url, {'login_error': login_error})
+        self.redirect(login_url)
+
+
+class RecoverHandler(PHCHandler):
+    """Resets user passwords given a valid ticket."""
+    @property
+    def html(self): return 'recover.html'
+
+    @gen.coroutine
+    def get(self):
+        if self.valid_ticket(self.get_argument('login'), self.get_argument('ticket')):
+            self.finish(self.render_init())
+        else:
+            self.finish(self.render_template(self.html,
+                        error="Invalid ticket, please re-request."))
+
+    @gen.coroutine
+    def post(self):
+        # FIXME: GET arguments do not survive POST (query arguments missing from body)
+        # contradicts https://groups.google.com/forum/#!topic/python-tornado/2ciCFlRteOo
+        data = {k: self.get_argument(k, strip=False)
+                for k in self.request.arguments}
         print(data)
+        print(self.path_kwargs) # already scrubbed.
 
-        html = self.render_template('recover.html',
-            email_sent='Recovery e-mail sent to '+data['username']+'.',
-        )
-        self.finish(html)
+        if self.valid_ticket(data['login'], data['ticket']):
+            if self.valid_pass(data['password'], data['passwordmatch']):
+                # invalidation = secrets.token_urlsafe(32)
+                                # TODO: just NULL?
+
+                c = self.phc_db.cursor()
+                c.execute("UPDATE users SET Ticket = '{}' WHERE Email = '{}';".format(data['password'], data['login']))
+                # c.execute("UPDATE users SET passwd = '{}', Ticket = '{}' WHERE Email = '{}';".format(data['password'], invalidation, data['login'])) # CHANGED from WHERE Ticket
+
+                self.phc_db.commit()
+                c.close()
+                self.finish(self.render_ok('Sucessful reset.'))
+            else:
+                self.finish(self.render_oops("Passwords given don't match."))
+        else:
+            self.finish(self.render_oops(
+                "Ticket got clobbered. Did you already request a new one?"))
+
+            '''
+            self.finish(self.render_template('recover.html',
+                login=self.get_argument('login', default=''),
+                ticket=self.get_argument('ticket', default=''),)
+            '''
 
 # /login renders the login page or the "Login with..." link,
 # so it should always be registered.
 # /logout clears cookies.
-# /register and /forgotpwd are specific to phcpy's SQL deployment.
+# FIXME: fork below
+# /register and /forgot are specific to phcpy's SQL deployment.
+# /activate and /recover consume e-mails generated by their respective counterpart.
 default_handlers = [
     (r"/login", LoginHandler),
     (r"/logout", LogoutHandler),
 
     (r'/register', RegisterHandler),
+    (r'/forgot', ForgotPassHandler),
+
+    (r'/activate', ActivateHandler),
     (r'/recover', RecoverHandler),
 ]

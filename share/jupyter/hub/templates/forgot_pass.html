@@ -1,7 +1,7 @@
 {% extends "prompt.html" %}
 
 {% block login %}
-
+    
   {% if success %}
   <p class="email_sent">
     {{success}}
@@ -12,9 +12,9 @@
         <p class="warning"> {{warning}} </p>
     {% endif %}
 
-    <form action="/hub/register" method="post" role="form">
+    <form action="/hub/forgot" method="post" role="form">
     <div class="auth-form-header">
-      Register account
+      Recover password
     </div>
     <div class='auth-form-body'>
 
@@ -30,22 +30,6 @@
         tabindex="1"
         autofocus="autofocus"
       />
-      <label for='password_input'>Password:</label>
-      <input
-        type="password"
-        class="form-control"
-        name="password"
-        id="password_input"
-        tabindex="2"
-      />
-      <label for='passwordmatch_input'>Confirm Password:</label>
-      <input
-        type="password"
-        class="form-control"
-        name="passwordmatch"
-        id="passwordmatch_input"
-        tabindex="3"
-      />
 
       <label for="firstname_input">First Name:</label>
       <input
@@ -55,7 +39,7 @@
         class="form-control"
         name="firstname"
         value="{{firstname}}"
-        tabindex="4"
+        tabindex="2"
       />
       <label for="lastname_input">Last Name:</label>
       <input
@@ -65,34 +49,22 @@
         class="form-control"
         name="lastname"
         value="{{lastname}}"
-        tabindex="5"
-      />
-
-      <label for="organization_input">Organization:</label>
-      <input
-        id="organization_input"
-        type="text"
-        autocapitalize="off"
-        autocorrect="off"
-        class="form-control"
-        name="organization"
-        value="{{organization}}"
-        tabindex="6"
+        tabindex="3"
       />
 
       <input
         type="submit"
-        id="register_submit"
+        id="forgot_submit"
         class='btn btn-jupyter'
-        value='Sign Up'
-        tabindex="7"
+        value='Send Recovery Email'
+        tabindex="4"
       />
     </div>
     </form>
 
     <center>
-    <a href="../forgot"
-       id="login-forgot-password">Forgot your password?</a>
+    <a href="../register"
+       id="login-create-an-account">Create an account</a>
     </center>
   {% endif %}
 {% endblock login %}
