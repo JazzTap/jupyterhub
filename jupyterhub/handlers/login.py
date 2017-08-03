@@ -11,9 +11,9 @@ from tornado import web
 from .base import BaseHandler
 
 # for phcpy db and its support tickets
-import sqlite3, smtplib
-import secrets # FIXME: 3.6+
-import hashlib, datetime # TODO: single use
+import sqlite3, smtplib # FIXME: sqlite3 -> pymysql
+import secrets # TODO: note 3.6+ dep
+import hashlib, datetime # single use
 from email.mime.text import MIMEText
 
 class LogoutHandler(BaseHandler):
@@ -112,7 +112,6 @@ class PHCHandler(BaseHandler): # ValidatingHandler
     def get(self):
         self.finish(self.render_init())
 
-    @property
     def phc_db(self):
         # print(self.config.keys()) # list of classnames used in config
         # FIXME: ungraceful exception when database of appropriate form unavailable
@@ -125,7 +124,8 @@ class PHCHandler(BaseHandler): # ValidatingHandler
 
 
     def valid_user(self, login, fname, lname):
-        c = self.phc_db.cursor()
+        db = self.phc_db()
+        c = db.cursor()
         c.execute("SELECT Name_First='{}' AND Name_Last='{}' FROM users WHERE Email='{}';"
                     .format(fname, lname, login))
         ret = c.fetchall()
@@ -134,8 +134,9 @@ class PHCHandler(BaseHandler): # ValidatingHandler
         return ret is not None
 
     def valid_ticket(self, login, ticket):
-        c = self.phc_db.cursor()
-        c.execute("SELECT '{}'= Ticket FROM users WHERE Email='{}';".format(ticket, login))
+        db = self.phc_db()
+        c = db.cursor()
+        c.execute("SELECT Ticket='{}' FROM users WHERE Email='{}';".format(ticket, login))
         ret = c.fetchall()
         print('filter by ticket:', ret, len(ret))
         c.close()
@@ -144,10 +145,11 @@ class PHCHandler(BaseHandler): # ValidatingHandler
     def valid_pass(self, pwd, pwdmatch):
         return pwd == pwdmatch and pwd is not ""
 
-    def has_folder(self, login):
-        c = self.phc_db.cursor()
+    def has_folder(self, login,):
+        db = self.phc_db()
+        c = db.cursor()
         c.execute("SELECT Folder FROM users WHERE Email='{}';"
-                    .format(ticket, login))
+                    .format(login))
         s = c.fetchone()
         c.close()
         return s is not None and s[0] is not None and s[0] is not ""
@@ -195,7 +197,8 @@ class RegisterHandler(PHCHandler):
     @gen.coroutine
     def post(self):
         data = {k: self.get_argument(k, strip=False) for k in self.request.arguments}
-        c = self.phc_db.cursor()
+        db = self.phc_db()
+        c = db.cursor()
 
         c.execute("SELECT Uid FROM users WHERE Email='{}';".format(data['username']))
         if len(c.fetchall()) == 0:
@@ -215,14 +218,15 @@ class RegisterHandler(PHCHandler):
             # sqlite> CREATE TABLE users(Uid, Name_First, Name_Last, Email, Organization, passwd, Created, Ticket, Folder, Tmp); 
             # FIXME: rows aren't appearing in db. commit fails silently?
 
-            c.execute("INSERT INTO users VALUES (NULL,'%s','%s','%s','%s','%s','%s','%s','%s',NULL);" % (data['firstname'],data['lastname'],data['username'],data['organization'],mungedPass,timestamp,ticket,"")) # create folder on activation
+            ret = c.execute("INSERT INTO users VALUES (NULL,'%s','%s','%s','%s','%s','%s','%s','%s',NULL);" % (data['firstname'],data['lastname'],data['username'],data['organization'],mungedPass,timestamp,ticket,"")) # create folder on activation
+            print(ret)
 
             try:
-                self.phc_db.commit()
+                ret = db.commit()
             except e:
                 print(e)
             else:
-                print("commit ok")
+                print(ret)
 
             c.close()
             self.finish(self.render_ok('Please verify your address at '+
@@ -268,10 +272,11 @@ class ForgotPassHandler(PHCHandler):
                 self.finish(self.render_oops(e))
 
             else:
-                c = self.phc_db.cursor()
+                db = self.phc_db()
+                c = db.cursor()
                 c.execute("UPDATE users SET Ticket = '{}', passwd = NULL WHERE Email = '{}';"
                           .format(ticket, data['username'])) # TODO: keep old password?
-                self.phc_db.commit()
+                db.commit()
                 c.close()
 
                 self.finish(self.render_ok('Reset done. Recovery e-mail sent to '
@@ -304,14 +309,15 @@ class ActivateHandler(PHCHandler):
         login_url = self.authenticator.login_url(self.hub.base_url)
 
         if self.valid_ticket(data['login'], data['ticket']):
-            if not has_folder(data['login']):
+            if not self.has_folder(data['login']):
                 # TODO: create unique UNIX user(name)s instead
                 folder = secrets.token_urlsafe(32)
 
-                c = self.phc_db.cursor() # TODO: reuse cursor
+                db = self.phc_db()
+                c = db.cursor() # TODO: reuse cursor
                 c.execute("UPDATE users SET Folder = '{}' WHERE Email = '{}'"
                             .format(folder, data['login']))
-                self.phc_db.commit()
+                db.commit()
                 c.close()
 
                 # FIXME: pass login_error to login.html via LoginHandler
@@ -333,6 +339,7 @@ class RecoverHandler(PHCHandler):
 
     @gen.coroutine
     def get(self):
+        print(self.get_argument('ticket'))
         if self.valid_ticket(self.get_argument('login'), self.get_argument('ticket')):
             self.finish(self.render_init())
         else:
@@ -351,13 +358,16 @@ class RecoverHandler(PHCHandler):
         if self.valid_ticket(data['login'], data['ticket']):
             if self.valid_pass(data['password'], data['passwordmatch']):
                 # invalidation = secrets.token_urlsafe(32)
-                                # TODO: just NULL?
 
-                c = self.phc_db.cursor()
-                c.execute("UPDATE users SET Ticket = '{}' WHERE Email = '{}';".format(data['password'], data['login']))
-                # c.execute("UPDATE users SET passwd = '{}', Ticket = '{}' WHERE Email = '{}';".format(data['password'], invalidation, data['login'])) # CHANGED from WHERE Ticket
+                s = hashlib.sha1()
+                s.update(data['password'].encode('utf-8'))
+                hashed = s.hexdigest()
 
-                self.phc_db.commit()
+                db = self.phc_db()
+                c = db.cursor()
+                c.execute("UPDATE users SET passwd = '{}', Ticket = NULL WHERE Email = '{}';".format(hashed, data['login'])) # CHANGED from WHERE Ticket
+
+                db.commit()
                 c.close()
                 self.finish(self.render_ok('Sucessful reset.'))
             else:
