@@ -91,12 +91,13 @@ class PHCHandler(BaseHandler): # ValidatingHandler
         "Pass success message to my template."
         return self.render_template(self.html, success = ok)
 
-    # TODO: inherit method as mixin
+    # TODO: this method is more of a mixin
     def phc_email(self, msg):
         """Send a MIMEText e-mail. Fall back to console if server not configured."""
         cfg = self.config.PHCHandler # dict(phcstmp='', phcmail='', phcmailps='')
 
-        if cfg.phcstmp == '':
+        # FIXME: document new config keys by subclassing README.
+        if 'phcstmp' not in cfg or cfg.phcstmp == '':
             print("Mail server not configured. Sending to console.")
             print(msg) # TEST configuration
             return
@@ -169,7 +170,7 @@ class RegisterHandler(PHCHandler):
     Welcome to PHC Web Interface. Please click the following link to activate your account.
 
 
-    %s/hub/activate?login=%s&ticket=%s""" % (firstname,
+    https://%s/hub/activate?login=%s&ticket=%s""" % (firstname,
         self.config.PHCHandler.host_address, email, ticket)
 
         msg = MIMEText(msg_cont)
@@ -224,7 +225,7 @@ class ForgotPassHandler(PHCHandler):
     Welcome to PHC Web Interface. Please click the following link to reset your password.
 
 
-    %s/hub/recover?login=%s&ticket=%s""" % (firstname,
+    https://%s/hub/recover?login=%s&ticket=%s""" % (firstname,
         self.config.PHCHandler.host_address, email, ticket)
 
         msg = MIMEText(msg_cont)
@@ -293,8 +294,6 @@ class RecoverHandler(PHCHandler):
         "Form submission logic."
         data = {k: self.get_argument(k, strip=False)
                 for k in self.request.arguments}
-        print(data)
-        print(self.path_kwargs) # already scrubbed.
 
         if not self.valid_ticket(data['login'], data['ticket']):
             self.finish(self.render_oops(
