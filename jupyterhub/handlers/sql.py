@@ -43,7 +43,7 @@ class PHCHandler(BaseHandler): # ValidatingHandler
                     .format(fname, lname, login))
 
         ret = c.fetchall()
-        print('filter by name: ', ret)
+        # print('filter by name: ', ret)
         c.close()
         return len(ret) != 0 and ret[0][0] != 0 and ret[0][0] is not None
             # FIXME: why do trivial results vary?
@@ -54,15 +54,13 @@ class PHCHandler(BaseHandler): # ValidatingHandler
         c.execute("SELECT Ticket='{}' FROM users WHERE Email='{}';".format(ticket, login))
 
         ret = c.fetchall()
-        print('filter by ticket:', ret)
+        # print('filter by ticket:', ret)
         c.close()
         return len(ret) != 0 and ret[0][0] != 0 and ret[0][0] is not None
 
     def valid_pass(self, pwd, pwdmatch):
-        "Is password nontrivial and match its verification?"
+        "Is password nontrivial and matching its verification?"
         return pwd == pwdmatch and pwd is not ""
-
-    # TODO: valid_email
 
     def has_folder(self, login):
         "Does user by this e-mail have a folder secret?"
@@ -127,13 +125,14 @@ class RegisterHandler(PHCHandler):
         db = self.phc_db()
         c = db.cursor()
 
+        # TODO: define near other validation queries
         s = c.execute("SELECT Uid FROM users WHERE Email='{}';".format(data['username'])).fetchall()
         c.close()
 
-        if len(s) != 0:
-            self.finish(self.render_oops('E-mail already registered.'))
-        elif data['username'] == "" or not '@' in data['username']:
+        if data['username'] == "" or not '@' in data['username']:
             self.finish(self.render_oops('E-mail given is not an address.'))
+        elif len(s) != 0:
+            self.finish(self.render_oops('E-mail already registered.'))
 
         elif data['firstname'] == "" or data['lastname'] == "" or data['organization'] == "":
             self.finish(self.render_oops('Please fill out all fields.'))
@@ -142,7 +141,7 @@ class RegisterHandler(PHCHandler):
             self.finish(self.render_oops('Passwords don\'t match or weren\'t given.'))
 
         else:
-            ticket = secrets.token_urlsafe(32) # NOTE: was sha(time)
+            ticket = secrets.token_urlsafe(24) # NOTE: was sha(time)
             try:
                 self.send_email(data['username'], data['firstname'], ticket)
 
@@ -198,7 +197,7 @@ class ForgotPassHandler(PHCHandler):
             # FIXME: offer to re-send the e-mail
             
         else:
-            ticket = secrets.token_urlsafe(32)
+            ticket = secrets.token_urlsafe(24)
             try:
                 self.send_email(data['username'], data['firstname'], ticket)
 
@@ -305,7 +304,7 @@ class RecoverHandler(PHCHandler):
             self.finish(self.render_oops("Passwords given don't match."))
 
         else:
-            # invalidation = secrets.token_urlsafe(32)
+            # invalidation = secrets.token_urlsafe(24)
 
             s = hashlib.sha1()
             s.update(data['password'].encode('utf-8'))
