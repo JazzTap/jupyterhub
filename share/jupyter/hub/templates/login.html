@@ -24,11 +24,12 @@
       </p>
 
       {% if login_error %}
-      <p class="login_error">
-        {{login_error}}
-      </p>
+      <p class="login_error">{{login_error}}</p>
       {% endif %}
-      <label for="username_input">E-mail (x@y.z):</label>
+      {% if activation %}
+      <p class="login_ok">{{activation}}</p>
+      {% endif %}
+      <label for="username_input">E-mail:</label>
       <input
         id="username_input"
         type="username"

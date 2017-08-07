@@ -7,10 +7,13 @@
     {{success}}
   </p>
   <a href="../login">Back to login</a>
+
   {% elif error %}
-  <p class="bad_ticket">
-    {{error}}
+  <p class="login_error">
+    {{error}}    
+  <a href="../login">Back to login</a>
   </p>
+
   {% else %}
     {% if warning %}
         <p class="warning"> {{warning}} </p>

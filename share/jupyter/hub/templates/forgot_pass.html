@@ -9,7 +9,7 @@
   <a href="../login">Back to login</a>
   {% else %}
     {% if warning %}
-        <p class="warning"> {{warning}} </p>
+        <p class="login_error"> {{warning}} </p>
     {% endif %}
 
     <form action="/hub/forgot" method="post" role="form">
