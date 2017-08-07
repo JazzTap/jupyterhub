@@ -26,7 +26,8 @@ class PHCHandler(BaseHandler): # ValidatingHandler
             CREATE TABLE users(Uid, Name_First, Name_Last, Email, Organization, passwd, Created, Ticket, Folder, Tmp);"""
 
         # TODO: give useful exception when db is unavailable or of wrong form
-        return pymysql.connect(self.config.PHCHandler.phc_db)
+        cfg = self.config.PHCHandler
+        return pymysql.connect(db=cfg.phc_db, host=cfg.phc_db_host)
 
     @property
     def html(self):
