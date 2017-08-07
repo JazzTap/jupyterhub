@@ -8,8 +8,7 @@ from tornado import web
 from .base import BaseHandler
 
 # for phcpy db and its support tickets
-# FIXME: sqlite3 -> pymysql
-import sqlite3, smtplib
+import pymysql, smtplib # VERIFY: sqlite-3 interface is equivalent
 import hashlib, datetime, secrets # NOTE: secrets introduces 3.6+ dep
 from email.mime.text import MIMEText
 
@@ -27,7 +26,7 @@ class PHCHandler(BaseHandler): # ValidatingHandler
             CREATE TABLE users(Uid, Name_First, Name_Last, Email, Organization, passwd, Created, Ticket, Folder, Tmp);"""
 
         # TODO: give useful exception when db is unavailable or of wrong form
-        return sqlite3.connect(self.config.PHCHandler.phc_db)
+        return pymysql.connect(self.config.PHCHandler.phc_db)
 
     @property
     def html(self):
