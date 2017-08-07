@@ -127,7 +127,8 @@ class RegisterHandler(PHCHandler):
         c = db.cursor()
 
         # TODO: define near other validation queries
-        s = c.execute("SELECT Uid FROM users WHERE Email='{}';".format(data['username'])).fetchall()
+        c.execute("SELECT Uid FROM users WHERE Email='{}';".format(data['username']))
+        s = c.fetchall()
         c.close()
 
         if data['username'] == "" or not '@' in data['username']:
